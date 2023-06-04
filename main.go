@@ -19,7 +19,7 @@ func main() {
 }
 
 func run() {
-	fmt.Printf("Running %v as %d\n", os.Args[2:], os.Getpid())
+	fmt.Printf("Running %v as PID %d\n", os.Args[2:], os.Getpid())
 
 	// /proc/self/exe child /bin/bash
 	cmd := exec.Command("/proc/self/exe", append([]string{"child"}, os.Args[2:]...)...)
@@ -27,16 +27,23 @@ func run() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID,
+		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
 	}
 	
 	cmd.Run()
 }
 
+// container
 func child() {
-	fmt.Printf("Running %v as %d\n", os.Args[2:], os.Getpid())
+	fmt.Printf("Running %v as PID %d\n", os.Args[2:], os.Getpid())
 
 	syscall.Sethostname([]byte("container"))
+	// change root
+	must(syscall.Chroot("/my-root-fs"))
+	must(syscall.Chdir("/"))
+	// mount proc
+	must(syscall.Mount("proc", "proc", "proc", 0, ""))
+
 	cmd := exec.Command(os.Args[2], os.Args[3:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -44,6 +51,8 @@ func child() {
 	
 
 	cmd.Run()
+
+	syscall.Unmount("proc", 0)
 }
 
 func must(err error) {
