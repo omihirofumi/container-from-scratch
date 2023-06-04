@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"syscall"
 )
 
@@ -27,16 +30,18 @@ func run() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+		Cloneflags:   syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
 		Unshareflags: syscall.CLONE_NEWNS,
 	}
-	
+
 	cmd.Run()
 }
 
 // container
 func child() {
 	fmt.Printf("Running %v as PID %d\n", os.Args[2:], os.Getpid())
+
+	cg()
 
 	syscall.Sethostname([]byte("container"))
 	// change root
@@ -49,11 +54,17 @@ func child() {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
 
 	cmd.Run()
 
 	syscall.Unmount("proc", 0)
+}
+
+func cg() {
+	pids := "/sys/fs/cgroup/pids"
+	os.Mkdir(filepath.Join(pids, "omi"), 0755)
+	must(ioutil.WriteFile(filepath.Join(pids, "hiro/pids.max"), []byte("20"), 0700))
+	must(ioutil.WriteFile(filepath.Join(pids, "hiro/cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0700))
 }
 
 func must(err error) {
